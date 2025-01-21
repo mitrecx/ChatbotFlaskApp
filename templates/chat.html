@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<body>
+<div id="output" style="white-space: pre-wrap;"></div>
+
+<script>
+    let charQueue = [];
+    let isProcessing = false;
+
+    const outputEl = document.getElementById('output');
+    const eventSource = new EventSource('/chat-stream');
+
+    async function processQueue() {
+        if (charQueue.length === 0 || isProcessing) return;
+
+        isProcessing = true;
+        while (charQueue.length > 0) {
+            const char = charQueue.shift();
+            outputEl.textContent += char;
+            await new Promise(resolve => setTimeout(resolve, 30));
+        }
+        isProcessing = false;
+    }
+
+    eventSource.onmessage = e => {
+        const newChars = e.data.split('');
+        charQueue.push(...newChars);  // 将新字符加入全局队列
+        processQueue();  // 触发处理
+    };
+
+    eventSource.onerror = err => {
+        console.error('Error:', err);
+        eventSource.close();
+    };
+</script>
+</body>
+</html>

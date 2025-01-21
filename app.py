@@ -102,19 +102,50 @@ def chat():
     return render_template('chat.html')
 
 
+@app.route('/chat2')
+def chat2():
+    return render_template('chat2.html')
+
+
 @app.route('/chat-stream', methods=['POST'])
 def chat_stream():
-    # 获取前端发送的JSON数据
-    data = request.get_json()
-    user_content = data.get('message', '')  # 获取用户消息
+    user_content = request.json.get('message', '')
 
     def generate():
-        # 创建对话流
         stream = client.chat.completions.create(
             model="ep-20250120130849-sd562",
             messages=[
                 {"role": "system", "content": "你是豆包，是由字节跳动开发的 AI 人工智能助手"},
-                {"role": "user", "content": user_content},  # 使用动态传入的内容
+                {"role": "user", "content": user_content},
+            ],
+            stream=True
+        )
+
+        for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta.content:
+                # 直接返回纯文本内容，不添加任何前缀
+                yield chunk.choices[0].delta.content
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/plain',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Access-Control-Allow-Origin': '*'
+        }
+    )
+
+@app.route('/chat-stream2', methods=['GET'])  # 改为只接受GET请求
+def chat_stream2():
+    # 通过URL参数获取用户问题
+    user_content = request.args.get('message', '')
+
+    def generate():
+        stream = client.chat.completions.create(
+            model="ep-20250120130849-sd562",
+            messages=[
+                {"role": "system", "content": "你是豆包，是由字节跳动开发的 AI 人工智能助手"},
+                {"role": "user", "content": user_content},
             ],
             stream=True
         )
@@ -122,7 +153,7 @@ def chat_stream():
         for chunk in stream:
             if chunk.choices and chunk.choices[0].delta.content:
                 content = chunk.choices[0].delta.content
-                yield f"data: {content}\n\n"  # 保持SSE格式
+                yield f"data: {content}\n\n"
 
     return Response(
         stream_with_context(generate()),

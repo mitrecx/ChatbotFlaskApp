@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<body>
+<input type="text" id="questionInput" placeholder="输入你的问题">
+<button onclick="startChat()">发送</button>
+<div id="output" style="white-space: pre-wrap; margin-top: 20px;"></div>
+
+
+<script>
+    function startChat() {
+        const question = encodeURIComponent(document.getElementById('questionInput').value);
+        const outputEl = document.getElementById('output');
+        outputEl.textContent = '';
+
+        if (eventSource) eventSource.close();
+
+        // 直接通过URL参数传递问题
+        eventSource = new EventSource(`/chat-stream2?message=${question}`);
+
+        eventSource.onmessage = e => {
+            const newChars = e.data.split('');
+            charQueue.push(...newChars);
+            if (!isProcessing) processQueue();
+        };
+
+        eventSource.onerror = err => {
+            console.error('Error:', err);
+            eventSource.close();
+        };
+    }
+</script>
+</body>
+</html>

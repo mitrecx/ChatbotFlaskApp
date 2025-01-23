@@ -180,12 +180,13 @@
         }
 
         abortController = new AbortController();
-
+        const token = "{{ token }}";  // 从模板获取 Token
         try {
             const response = await fetch('/chat-stream', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-Auth-Token': token  // 在请求头携带 Token
                 },
                 body: JSON.stringify({message: question}),
                 signal: abortController.signal

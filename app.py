@@ -10,6 +10,10 @@ client = Ark(
 
 app = Flask(__name__)
 
+doubao_pro_128k = 'ep-20250120130849-sd562'
+# 慢推理模型
+doubao_15pro_32k = 'ep-20250123190804-d927p'
+current_model = doubao_15pro_32k
 
 @app.route('/chat')
 def chat():
@@ -22,7 +26,7 @@ def chat_stream():
 
     def generate():
         stream = client.chat.completions.create(
-            model="ep-20250120130849-sd562",
+            model=current_model,
             messages=[
                 {"role": "system", "content": "你是豆包，是由字节跳动开发的 AI 人工智能助手"},
                 {"role": "user", "content": user_content},

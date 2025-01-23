@@ -1,89 +1,161 @@
 import datetime
-from flask import Flask, Response, stream_with_context, session, render_template, request
-import uuid
+from flask import Flask, render_template, request, jsonify, Response, stream_with_context
+from flask_sqlalchemy import SQLAlchemy
 import os
 from volcenginesdkarkruntime import Ark
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(24)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///chat.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+db = SQLAlchemy(app)
 client = Ark(
     base_url=os.getenv("ARK_BASE_URL"),
     api_key=os.getenv("ARK_API_KEY")
 )
 
-doubao_pro_128k = 'ep-20250120130849-sd562'
-doubao_15pro_32k = 'ep-20250123190804-d927p'
-current_model = doubao_15pro_32k
+
+# 数据模型
+class ChatSession(db.Model):
+    id = db.Column(db.String(36), primary_key=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.now)
+    is_used = db.Column(db.Boolean, default=False)  # 新增字段
+    messages = db.relationship('ChatMessage', backref='session', lazy='dynamic')
 
 
+class ChatMessage(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    session_id = db.Column(db.String(36), db.ForeignKey('chat_session.id'))
+    role = db.Column(db.String(10))
+    content = db.Column(db.Text)
+    timestamp = db.Column(db.DateTime, default=datetime.datetime.now)
+
+
+# 初始化数据库
+with app.app_context():
+    db.create_all()
+
+
+# 路由
 @app.route('/chat')
 def chat():
-    # 打印创建上下文的提示信息
-    print("----- create context -----")
-    # 调用client的context.create方法创建一个会话上下文
-    response = client.context.create(
-        # 指定模型
-        model=current_model,
-        # 指定模式为会话
-        mode="session",
-        # 设置消息列表，包含一个系统角色的消息
-        messages=[
-            {"role": "system", "content": "你是豆包，是由字节跳动开发的 AI 人工智能助手"},
-        ],
-        # 设置会话的生存时间为60分钟
-        ttl=datetime.timedelta(minutes=60),
-    )
-    # 打印创建上下文的响应结果
-    print(response)
-    token = response.id
-    # token = str(uuid.uuid4())
-    session['auth_token'] = token
-    return render_template('chat.html', token=token)
+    """显示聊天界面并加载会话历史"""
+    sessions = ChatSession.query.order_by(ChatSession.created_at.desc()).all()
+    session_data = []
+
+    for s in sessions:
+        last_msg = s.messages.order_by(ChatMessage.timestamp.desc()).first()
+        session_data.append({
+            "id": s.id,
+            "created_at": s.created_at.strftime("%Y-%m-%d %H:%M"),
+            "preview": last_msg.content[:20] + '...' if last_msg else "新会话"
+        })
+
+    return render_template('chat.html', sessions=session_data)
 
 
-@app.route('/chat-stream', methods=['POST', 'OPTIONS'])
+@app.route('/create-session', methods=['POST'])
+def create_session():
+    try:
+        # 检查是否存在未使用的会话
+        unused_session = ChatSession.query.filter_by(is_used=False).order_by(ChatSession.created_at.desc()).first()
+
+        if unused_session:
+            return jsonify({
+                "success": True,
+                "session_id": unused_session.id,
+                "created_at": unused_session.created_at.strftime("%Y-%m-%d %H:%M"),
+                "is_new": False  # 标记是否为新建
+            })
+
+        # 创建新会话
+        response = client.context.create(
+            model='ep-20250123190804-d927p',
+            mode="session",
+            messages=[{"role": "system", "content": "你是豆包，是由字节跳动开发的 AI 人工智能助手"}],
+            ttl=datetime.timedelta(minutes=60)
+        )
+        token = response.id
+
+        new_session = ChatSession(id=token, is_used=False)
+        db.session.add(new_session)
+        db.session.commit()
+
+        return jsonify({
+            "success": True,
+            "session_id": token,
+            "created_at": new_session.created_at.strftime("%Y-%m-%d %H:%M"),
+            "is_new": True
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/get-messages')
+def get_messages():
+    """获取指定会话的消息记录"""
+    session_id = request.args.get('session_id')
+    messages = ChatMessage.query.filter_by(session_id=session_id).order_by(ChatMessage.timestamp.asc()).all()
+
+    return jsonify([{
+        "role": msg.role,
+        "content": msg.content,
+        "time": msg.timestamp.strftime("%H:%M")
+    } for msg in messages])
+
+
+@app.route('/chat-stream', methods=['POST'])
 def chat_stream():
-    if request.method == 'OPTIONS':
-        return _build_cors_preflight_response()
-
+    # 在生成器外部捕获所有请求数据
     token = request.headers.get('X-Auth-Token')
-    if not token or token != session.get('auth_token'):
-        return _cors_response('Unauthorized', 401)
-
     user_content = request.json.get('message', '')
 
+    # 标记会话已使用
+    current_session = ChatSession.query.get(token)
+    if current_session and not current_session.is_used:
+        current_session.is_used = True
+        db.session.commit()
+
+    # 保存用户消息到数据库
+    user_msg = ChatMessage(
+        session_id=token,
+        role='user',
+        content=user_content
+    )
+    db.session.add(user_msg)
+    db.session.commit()  # 立即提交用户消息
+
+    # 创建生成器函数并保持上下文
     def generate():
-        # stream = client.chat.completions.create(
+        # 使用流式API获取回复
         stream = client.context.completions.create(
-            # 指定上下文ID
             context_id=token,
-            model=current_model,
-            messages=[
-                {"role": "user", "content": user_content},
-            ],
+            model='ep-20250123190804-d927p',
+            messages=[{"role": "user", "content": user_content}],
             stream=True
         )
+
+        full_response = []
         for chunk in stream:
             if chunk.choices and chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
+                content = chunk.choices[0].delta.content
+                full_response.append(content)
+                yield content  # 流式返回内容
 
-    return _cors_response(stream_with_context(generate()))
+        # 流结束后保存AI回复
+        ai_msg = ChatMessage(
+            session_id=token,
+            role='assistant',
+            content=''.join(full_response)
+        )
+        db.session.add(ai_msg)
+        db.session.commit()
 
-
-def _build_cors_preflight_response():
-    response = Response()
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, X-Auth-Token'
-    response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-    return response
-
-
-def _cors_response(content, status=200):
-    response = Response(content, status=status, mimetype='text/plain')
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    return response
+    # 使用stream_with_context保持请求上下文
+    return Response(stream_with_context(generate()), mimetype='text/plain')
 
 
 if __name__ == '__main__':
-    app.run()
+    app.run(debug=True)

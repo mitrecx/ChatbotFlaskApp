@@ -1,6 +1,8 @@
 import datetime
-from flask import Flask, render_template, request, jsonify, Response, stream_with_context
+from flask import Flask, render_template, request, jsonify, Response, stream_with_context, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
 import os
 from volcenginesdkarkruntime import Ark
 
@@ -15,14 +17,23 @@ client = Ark(
     api_key=os.getenv("ARK_API_KEY")
 )
 
+# 初始化 Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
 
 # 数据模型
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password = db.Column(db.String(120), nullable=False)
+
 class ChatSession(db.Model):
     id = db.Column(db.String(36), primary_key=True)
     created_at = db.Column(db.DateTime, default=datetime.datetime.now)
-    is_used = db.Column(db.Boolean, default=False)  # 新增字段
+    is_used = db.Column(db.Boolean, default=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))  # 关联用户
     messages = db.relationship('ChatMessage', backref='session', lazy='dynamic')
-
 
 class ChatMessage(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -31,19 +42,57 @@ class ChatMessage(db.Model):
     content = db.Column(db.Text)
     timestamp = db.Column(db.DateTime, default=datetime.datetime.now)
 
-
 # 初始化数据库
 with app.app_context():
     db.create_all()
 
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
 
-# 路由
+# 登录路由
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        user = User.query.filter_by(username=username).first()
+        if user and check_password_hash(user.password, password):
+            login_user(user)
+            return redirect(url_for('chat'))
+        flash('用户名或密码错误')
+    return render_template('login.html')
+
+# 注册路由
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        hashed_pw = generate_password_hash(password)
+        if User.query.filter_by(username=username).first():
+            flash('用户名已存在')
+            return redirect(url_for('register'))
+        new_user = User(username=username, password=hashed_pw)
+        db.session.add(new_user)
+        db.session.commit()
+        login_user(new_user)
+        return redirect(url_for('chat'))
+    return render_template('register.html')
+
+# 注销路由
+@app.route('/logout', methods=['POST'])
+@login_required
+def logout():
+    logout_user()
+    return jsonify({"success": True}), 200
+
+# 原有路由添加登录保护
 @app.route('/chat')
+@login_required
 def chat():
-    """显示聊天界面并加载会话历史"""
-    sessions = ChatSession.query.order_by(ChatSession.created_at.desc()).all()
+    sessions = ChatSession.query.filter_by(user_id=current_user.id).order_by(ChatSession.created_at.desc()).all()
     session_data = []
-
     for s in sessions:
         last_msg = s.messages.order_by(ChatMessage.timestamp.desc()).first()
         session_data.append({
@@ -51,15 +100,16 @@ def chat():
             "created_at": s.created_at.strftime("%Y-%m-%d %H:%M"),
             "preview": last_msg.content[:20] + '...' if last_msg else "新会话"
         })
-
     return render_template('chat.html', sessions=session_data)
 
-
+# 其他路由（/create-session, /get-messages, /chat-stream）都添加@login_required
+# 修改/create-session路由中的会话创建逻辑，关联当前用户
 @app.route('/create-session', methods=['POST'])
+@login_required
 def create_session():
     try:
         # 检查是否存在未使用的会话
-        unused_session = ChatSession.query.filter_by(is_used=False).order_by(ChatSession.created_at.desc()).first()
+        unused_session = ChatSession.query.filter_by(is_used=False, user_id=current_user.id).order_by(ChatSession.created_at.desc()).first()
 
         if unused_session:
             return jsonify({
@@ -78,7 +128,7 @@ def create_session():
         )
         token = response.id
 
-        new_session = ChatSession(id=token, is_used=False)
+        new_session = ChatSession(id=token, is_used=False, user_id=current_user.id)
         db.session.add(new_session)
         db.session.commit()
 

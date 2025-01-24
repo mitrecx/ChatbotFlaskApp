@@ -71,6 +71,64 @@
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
 
+        /* 新增CSS */
+    #sidebar {
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .scrollable-content {
+        flex: 1;
+        overflow-y: auto;
+        padding-bottom: 20px; /* 避免内容被底部遮挡 */
+    }
+
+    .user-footer {
+        border-top: 1px solid #dee2e6;
+        padding: 20px;
+        background: #f8f9fa;
+        flex-shrink: 0; /* 防止被压缩 */
+    }
+
+    .user-profile {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 15px;
+    }
+
+    .avatar {
+        width: 36px;
+        height: 36px;
+        background: #4CAF50;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 500;
+    }
+
+    .logout-btn {
+        width: 100%;
+        background: #f44336;
+        color: white;
+        padding: 10px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        transition: background 0.2s;
+    }
+
+    .logout-btn:hover {
+        background: #d32f2f;
+    }
+
         #input-box {
             padding: 20px;
             background: white;
@@ -111,21 +169,41 @@
 <body>
 <!-- 侧边栏 -->
 <div id="sidebar">
-    <div style="margin-bottom: 20px;">
-        <h3 style="margin: 0 0 15px 0;">会话历史</h3>
-        <button onclick="createSession()" style="width: 100%;">新建会话</button>
+     <!-- 可滚动区域包裹会话历史 -->
+    <div class="scrollable-content">
+        <div style="margin-bottom: 20px;">
+            <h3 style="margin: 0 0 15px 0;">会话历史</h3>
+            <button onclick="createSession()" style="width: 100%;">新建会话</button>
+        </div>
+        <div id="session-list">
+            {% for session in sessions %}
+                <div class="session-item" onclick="loadSession('{{ session.id }}')">
+                    <div style="font-size: 0.9em; color: #666;">
+                        {{ session.created_at }}
+                    </div>
+                    <div style="margin-top: 5px; color: #333;">
+                        {{ session.preview }}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
     </div>
-    <div id="session-list">
-        {% for session in sessions %}
-            <div class="session-item" onclick="loadSession('{{ session.id }}')">
-                <div style="font-size: 0.9em; color: #666;">
-                    {{ session.created_at }}
-                </div>
-                <div style="margin-top: 5px; color: #333;">
-                    {{ session.preview }}
-                </div>
+
+    <!-- 固定在底部的用户信息 -->
+    <div class="user-footer">
+        <div class="user-profile">
+            <div class="avatar">{{ current_user.username | first | upper }}</div>
+            <div class="user-details">
+                <div class="username">{{ current_user.username }}</div>
+                <div class="user-id">ID: {{ current_user.id }}</div>
             </div>
-        {% endfor %}
+        </div>
+        <button class="logout-btn" onclick="logout()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+                <!-- 保持原有SVG代码 -->
+            </svg>
+            退出登录
+        </button>
     </div>
 </div>
 
@@ -259,6 +337,13 @@
             sendMessage();
         }
     });
+
+    async function logout() {
+        const response = await fetch('/logout', {method: 'POST'})
+        if (response.ok) {
+            window.location.href = '/login'
+        }
+    }
 </script>
 </body>
 </html>

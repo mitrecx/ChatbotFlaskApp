@@ -22,11 +22,13 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
+
 # 数据模型
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password = db.Column(db.String(120), nullable=False)
+
 
 class ChatSession(db.Model):
     id = db.Column(db.String(36), primary_key=True)
@@ -35,6 +37,7 @@ class ChatSession(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))  # 关联用户
     messages = db.relationship('ChatMessage', backref='session', lazy='dynamic')
 
+
 class ChatMessage(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     session_id = db.Column(db.String(36), db.ForeignKey('chat_session.id'))
@@ -42,13 +45,16 @@ class ChatMessage(db.Model):
     content = db.Column(db.Text)
     timestamp = db.Column(db.DateTime, default=datetime.datetime.now)
 
+
 # 初始化数据库
 with app.app_context():
     db.create_all()
 
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
 
 # 登录路由
 @app.route('/login', methods=['GET', 'POST'])
@@ -62,6 +68,7 @@ def login():
             return redirect(url_for('chat'))
         flash('用户名或密码错误')
     return render_template('login.html')
+
 
 # 注册路由
 @app.route('/register', methods=['GET', 'POST'])
@@ -80,14 +87,16 @@ def register():
         return redirect(url_for('chat'))
     return render_template('register.html')
 
-# 注销路由
+
+# 登出路由
 @app.route('/logout', methods=['POST'])
 @login_required
 def logout():
     logout_user()
     return jsonify({"success": True}), 200
 
-# 原有路由添加登录保护
+
+# chat 页面
 @app.route('/chat')
 @login_required
 def chat():
@@ -102,6 +111,7 @@ def chat():
         })
     return render_template('chat.html', sessions=session_data)
 
+
 # 其他路由（/create-session, /get-messages, /chat-stream）都添加@login_required
 # 修改/create-session路由中的会话创建逻辑，关联当前用户
 @app.route('/create-session', methods=['POST'])
@@ -109,7 +119,8 @@ def chat():
 def create_session():
     try:
         # 检查是否存在未使用的会话
-        unused_session = ChatSession.query.filter_by(is_used=False, user_id=current_user.id).order_by(ChatSession.created_at.desc()).first()
+        unused_session = ChatSession.query.filter_by(is_used=False, user_id=current_user.id).order_by(
+            ChatSession.created_at.desc()).first()
 
         if unused_session:
             return jsonify({

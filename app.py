@@ -56,20 +56,6 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 
-# 登录路由
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        user = User.query.filter_by(username=username).first()
-        if user and check_password_hash(user.password, password):
-            login_user(user)
-            return redirect(url_for('chat'))
-        flash('用户名或密码错误')
-    return render_template('login.html')
-
-
 # 注册路由
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -86,6 +72,20 @@ def register():
         login_user(new_user)
         return redirect(url_for('chat'))
     return render_template('register.html')
+
+
+# 登录路由
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        user = User.query.filter_by(username=username).first()
+        if user and check_password_hash(user.password, password):
+            login_user(user)
+            return redirect(url_for('chat'))
+        flash('用户名或密码错误')
+    return render_template('login.html')
 
 
 # 登出路由

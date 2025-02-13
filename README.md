@@ -10,5 +10,9 @@ ARK_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
 3. 选择 API 调用 -> 通过 API Key 授权
 4. 复制显示的 API 密钥
 
-注意: 要把`.env` 文件路径配置在启动参数中.
+~~注意: 要把`.env` 文件路径配置在启动参数中.~~
 
+本地运行:
+```bash
+flask run
+```

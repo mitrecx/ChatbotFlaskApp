@@ -75,7 +75,7 @@ def register():
         db.session.commit()
         login_user(new_user)
         return redirect(url_for('chat'))
-    return render_template('register.html')
+    return render_template('register.jinja')
 
 
 # 登录路由
@@ -89,7 +89,7 @@ def login():
             login_user(user)
             return redirect(url_for('chat'))
         flash('用户名或密码错误')
-    return render_template('login.html')
+    return render_template('login.jinja')
 
 
 # 登出路由
@@ -113,7 +113,7 @@ def chat():
             "created_at": s.created_at.strftime("%Y-%m-%d %H:%M"),
             "preview": last_msg.content[:20] + '...' if last_msg else "新会话"
         })
-    return render_template('chat.html', sessions=session_data)
+    return render_template('chat.jinja', sessions=session_data)
 
 
 # 其他路由（/create-session, /get-messages, /chat-stream）都添加@login_required

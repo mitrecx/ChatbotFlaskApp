@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>智能聊天</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            font-family: Arial, sans-serif;
+        }
+
+        #sidebar {
+            width: 280px;
+            background: #f8f9fa;
+            border-right: 1px solid #dee2e6;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        #chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #fafafa;
+        }
+
+        .session-item {
+            padding: 12px;
+            margin: 8px 0;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: 0.2s;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .session-item:hover {
+            background: #e9ecef;
+            transform: translateX(3px);
+        }
+
+        .session-item.active {
+            border-left: 4px solid #4CAF50;
+            background: #e3f2fd;
+        }
+
+        .message {
+            margin: 10px 0;
+            padding: 12px;
+            border-radius: 8px;
+            max-width: 80%;
+            animation: fadeIn 0.3s;
+        }
+
+        .user-message {
+            background: #e3f2fd;
+            margin-left: auto;
+        }
+
+        .bot-message {
+            background: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 新增CSS */
+        #sidebar {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .scrollable-content {
+            flex: 1;
+            overflow-y: auto;
+            padding-bottom: 20px;
+            /* 避免内容被底部遮挡 */
+        }
+
+        .user-footer {
+            border-top: 1px solid #dee2e6;
+            padding: 20px;
+            background: #f8f9fa;
+            flex-shrink: 0;
+            /* 防止被压缩 */
+        }
+
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+
+        .avatar {
+            width: 36px;
+            height: 36px;
+            background: #4CAF50;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 500;
+        }
+
+        .logout-btn {
+            width: 100%;
+            background: #f44336;
+            color: white;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: background 0.2s;
+        }
+
+        .logout-btn:hover {
+            background: #d32f2f;
+        }
+
+        #input-box {
+            padding: 20px;
+            background: white;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+            display: flex;
+            gap: 10px;
+        }
+
+        #message-input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        button {
+            padding: 12px 24px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- 侧边栏 -->
+    <div id="sidebar">
+        <!-- 可滚动区域包裹会话历史 -->
+        <div class="scrollable-content">
+            <div style="margin-bottom: 20px;">
+                <h3 style="margin: 0 0 15px 0;">会话历史</h3>
+                <button onclick="createSession()" style="width: 100%;">新建会话</button>
+            </div>
+            <div id="session-list">
+                {% for session in sessions %}
+                <div class="session-item" onclick="loadSession('{{ session.id }}')">
+                    <div style="font-size: 0.9em; color: #666;">
+                        {{ session.created_at }}
+                    </div>
+                    <div style="margin-top: 5px; color: #333;">
+                        {{ session.preview }}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- 固定在底部的用户信息 -->
+        <div class="user-footer">
+            <div class="user-profile">
+                <div class="avatar">{{ current_user.username | first | upper }}</div>
+                <div class="user-details">
+                    <div class="username">{{ current_user.username }}</div>
+                    <div class="user-id">ID: {{ current_user.id }}</div>
+                </div>
+            </div>
+            <button class="logout-btn" onclick="logout()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+                    <!-- 保持原有SVG代码 -->
+                </svg>
+                退出登录
+            </button>
+        </div>
+    </div>
+
+    <!-- 聊天区域 -->
+    <div id="chat-area">
+        <div id="messages"></div>
+        <div id="input-box">
+            <input type="text" id="message-input" placeholder="输入消息..." autocomplete="off">
+            <button onclick="sendMessage()">发送</button>
+        </div>
+    </div>
+
+    <script>
+        let currentSessionId = null;
+
+        // 初始化加载第一个会话
+        window.addEventListener('load', () => {
+            {% if sessions %}
+            currentSessionId = '{{ sessions[0].id }}';
+            loadSession(currentSessionId);
+            {% endif %}
+        });
+
+        // 加载会话消息
+        async function loadSession(sessionId) {
+            currentSessionId = sessionId;
+            document.querySelectorAll('.session-item').forEach(item => {
+                item.classList.remove('active');
+                if (item.getAttribute('onclick').includes(sessionId)) {
+                    item.classList.add('active');
+                }
+            });
+
+            const response = await fetch(`/get-messages?session_id=${sessionId}`);
+            const messages = await response.json();
+
+            const container = document.getElementById('messages');
+            container.innerHTML = messages.map(msg => `
+                <div class="message ${msg.role}-message">
+                    <div class="timestamp">${msg.time}</div>
+                    <div class="content">${marked.parse(msg.content)}</div>
+                </div>
+            `).join('');
+
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // 创建新会话
+        async function createSession() {
+            const response = await fetch('/create-session', { method: 'POST' });
+            const result = await response.json();
+
+            if (result.success) {
+                if (result.is_new) {
+                    // 新建会话时刷新页面
+                    window.location.reload();
+                } else {
+                    // 使用现有未使用会话
+                    currentSessionId = result.session_id;
+                    document.querySelectorAll('.session-item').forEach(item => {
+                        item.classList.remove('active');
+                        if (item.textContent.includes(result.session_id)) {
+                            item.classList.add('active');
+                        }
+                    });
+                    await loadSession(result.session_id);
+                    alert('请继续使用当前未开始的会话');
+                }
+            } else {
+                alert('操作失败: ' + result.error);
+            }
+        }
+
+        // 发送消息
+        async function sendMessage() {
+            const input = document.getElementById('message-input');
+            const message = input.value.trim();
+            if (!message || !currentSessionId) return;
+
+            input.value = '';
+            const messagesDiv = document.getElementById('messages');
+
+            // 添加用户消息
+            messagesDiv.innerHTML += `
+                <div class="message user-message">
+                    <div class="timestamp">${new Date().toLocaleTimeString()}</div>
+                    <div class="content">${marked.parse(message)}</div>
+                </div>
+            `;
+
+            // 获取AI回复
+            const response = await fetch('/chat-stream', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Auth-Token': currentSessionId
+                },
+                body: JSON.stringify({ message: message })
+            });
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            // 创建AI消息容器
+            const botDiv = document.createElement('div');
+            botDiv.className = 'message bot-message';
+            botDiv.innerHTML = `
+                <div class="timestamp">${new Date().toLocaleTimeString()}</div>
+                <div class="content"></div>
+            `;
+            messagesDiv.appendChild(botDiv);
+
+            // 流式处理
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                botDiv.querySelector('.content').innerHTML = marked.parse(buffer + '▌');
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
+
+            botDiv.querySelector('.content').innerHTML = marked.parse(buffer);
+        }
+
+        // 回车发送
+        document.getElementById('message-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        async function logout() {
+            const response = await fetch('/logout', { method: 'POST' })
+            if (response.ok) {
+                window.location.href = '/login'
+            }
+        }
+    </script>
+</body>
+
+</html>

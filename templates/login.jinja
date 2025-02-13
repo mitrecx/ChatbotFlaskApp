@@ -1,22 +1,44 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>登录</title>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px; }
-        .form-group { margin-bottom: 15px; }
-        input { width: 100%; padding: 8px; margin-top: 5px; }
-        button { background: #4CAF50; color: white; padding: 10px 20px; border: none; cursor: pointer; }
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 400px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        input {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+        }
+
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            cursor: pointer;
+        }
     </style>
 </head>
+
 <body>
     <h2>登录</h2>
     {% with messages = get_flashed_messages() %}
-        {% if messages %}
-            {% for message in messages %}
-                <div style="color: red;">{{ message }}</div>
-            {% endfor %}
-        {% endif %}
+    {% if messages %}
+    {% for message in messages %}
+    <div style="color: red;">{{ message }}</div>
+    {% endfor %}
+    {% endif %}
     {% endwith %}
     <form method="POST">
         <div class="form-group">
@@ -31,4 +53,5 @@
     </form>
     <p>没有账号？<a href="{{ url_for('register') }}">立即注册</a></p>
 </body>
+
 </html>

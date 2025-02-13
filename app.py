@@ -4,7 +4,11 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
+from dotenv import load_dotenv
 from volcenginesdkarkruntime import Ark
+
+# 加载 .env 文件中的环境变量
+load_dotenv(override=True)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(24)
@@ -151,6 +155,7 @@ def create_session():
         })
 
     except Exception as e:
+        print(f"Error creating session: {str(e)}")  # 添加错误日志
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -188,9 +193,9 @@ def chat_stream():
     db.session.add(user_msg)
     db.session.commit()  # 立即提交用户消息
 
-    # 创建生成器函数并保持上下文
+    # 生成器函数
     def generate():
-        # 使用流式API获取回复
+        # 使用生成器函数, 使用流式API获取回复. 
         stream = client.context.completions.create(
             context_id=token,
             model='ep-20250123190804-d927p',
@@ -199,13 +204,14 @@ def chat_stream():
         )
 
         full_response = []
+        # 遍历流式响应
         for chunk in stream:
             if chunk.choices and chunk.choices[0].delta.content:
                 content = chunk.choices[0].delta.content
                 full_response.append(content)
                 yield content  # 流式返回内容
 
-        # 流结束后保存AI回复
+        # 保存AI回复到数据库
         ai_msg = ChatMessage(
             session_id=token,
             role='assistant',

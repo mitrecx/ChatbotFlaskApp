@@ -4,3 +4,7 @@
 instance/chat.db
 
 test/
+
+__pycache__/
+*.pyc
+.DS_Store
